@@ -124,7 +124,10 @@ async function main() {
 
   fs.mkdirSync(paths.outQueries, { recursive: true });
   for (const id of config.queries) {
-    fs.copyFileSync(path.join(paths.queries, `${id}.sparql`), path.join(paths.outQueries, `${id}.sparql`));
+    // Blank lines are removed, as sparql-benchmark-runner separates multiple queries in a file by blank lines.
+    const query = fs.readFileSync(path.join(paths.queries, `${id}.sparql`), 'utf8')
+      .split('\n').filter(line => line.trim().length > 0).join('\n');
+    fs.writeFileSync(path.join(paths.outQueries, `${id}.sparql`), `${query}\n`);
   }
   fs.writeFileSync(path.join(paths.out, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   log(`Sample has ${manifest.sampleTriples} triples`);

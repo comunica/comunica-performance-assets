@@ -39,7 +39,7 @@ It only approximates:
 The number of matches of each query pattern per dataset, over the full data and over the sample, is listed under `patterns` in `manifest.json`.
 The sample is therefore suitable for tracking the performance of federated query engines over time, but its query times are not comparable to published LargeRDFBench results.
 
-C2 and C5 join two parts of the query only through a `FILTER` on equal values, which the Comunica versions used here evaluate as a cross product, taking minutes even over the sample. Wherever this build evaluates them, it uses the equivalent formulations in `equivalent-queries/`, which join on a shared variable instead. The queries in the archive are unchanged.
+C2 and C5 join two parts of the query only through a `FILTER` on equal values, which the Comunica versions used here evaluate as a cross product, taking minutes even over the sample. Wherever this build evaluates them, it uses the equivalent formulations in `equivalent-queries/`, which join on a shared variable instead. The queries in the archive are the original ones.
 
 ## Validation
 
@@ -59,7 +59,7 @@ The number of differing rows per query is listed under `validation` in `manifest
 The archive contains:
 
 - `generated/datasets/<dataset>.nt`: the sampled datasets, as sorted N-Triples, one file per federation member.
-- `generated/queries/<query>.sparql`: the 23 queries, unchanged.
+- `generated/queries/<query>.sparql`: the 23 queries, unchanged except that blank lines are removed, as `sparql-benchmark-runner` separates multiple queries in a file by blank lines.
 - `generated/results/<query>.srj`: the expected results over the sample, in the SPARQL 1.1 Query Results JSON Format. For queries with a `LIMIT`, any result with the same number of results is correct.
 - `generated/manifest.json`: the build parameters, the size of each dataset with its SHA-256 checksum, the number of matches of each query pattern per dataset, the lineage of each query, and the validation results.
 
