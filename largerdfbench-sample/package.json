@@ -1,0 +1,27 @@
+{
+  "name": "largerdfbench-sample",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Builds a reduced, answer-preserving sample of the FedBench part of LargeRDFBench for CI benchmarks",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "fetch": "node bin/fetch.js",
+    "lineage": "node --max-old-space-size=8192 bin/lineage.js",
+    "sample": "node --max-old-space-size=8192 bin/sample.js",
+    "validate": "node --max-old-space-size=8192 bin/validate.js",
+    "package": "node bin/package.js",
+    "build": "npm run fetch && npm run lineage && npm run sample && npm run validate && npm run package"
+  },
+  "dependencies": {
+    "@comunica/query-sparql-hdt": "5.0.1",
+    "@comunica/query-sparql-rdfjs": "5.4.1",
+    "hdt": "3.3.2",
+    "n3": "2.13.12",
+    "rdf-stores": "2.10.0",
+    "sparqljs": "3.7.4",
+    "yauzl": "3.4.0"
+  }
+}
