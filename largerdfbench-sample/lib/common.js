@@ -130,10 +130,12 @@ class PatternMatcher {
         if (isOpen(tp)) {
           continue;
         }
+        const term = t => isVariable(t) ? undefined : t;
         const entry = {
           s: isVariable(tp.subject) ? undefined : termKey(tp.subject),
           p: isVariable(tp.predicate) ? undefined : termKey(tp.predicate),
           o: isVariable(tp.object) ? undefined : termKey(tp.object),
+          terms: [ term(tp.subject), term(tp.predicate), term(tp.object) ],
         };
         const key = `${entry.s ?? '?'} ${entry.p ?? '?'} ${entry.o ?? '?'}`;
         if (seen.has(key)) {
@@ -155,14 +157,25 @@ class PatternMatcher {
     }
   }
 
-  /** Indexes of the patterns that a triple (given as term keys) matches. */
-  match(s, p, o) {
+  /**
+   * Indexes of the patterns that a triple matches, given the keys of its subject and predicate, and its object term,
+   * whose key is only computed when needed, as this is called for every triple of the full data.
+   */
+  match(s, p, object) {
     const matches = [];
+    let o;
     for (const list of [ this.byPredicate.get(p), this.variablePredicate ]) {
       for (const entry of list ?? []) {
-        if ((entry.s === undefined || entry.s === s) && (entry.o === undefined || entry.o === o)) {
-          matches.push(entry.index);
+        if (entry.s !== undefined && entry.s !== s) {
+          continue;
         }
+        if (entry.o !== undefined) {
+          o ??= termKey(object);
+          if (entry.o !== o) {
+            continue;
+          }
+        }
+        matches.push(entry.index);
       }
     }
     return matches;

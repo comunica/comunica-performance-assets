@@ -2,7 +2,9 @@
 'use strict';
 // Builds the sampled datasets. Per dataset, subjects are sampled at its subjectRate. Of a sampled subject,
 // all triples that match a query pattern are kept, and other triples are kept at irrelevantRate.
-// Finally, the answer lineage of all queries is added, so that query results equal those over the full data.
+// Then, the answer lineage of all queries is added, so that query results equal those over the full data,
+// and one witness triple for each query pattern that matches the full dataset but nothing in the sample,
+// so that the same datasets are relevant to each pattern as in the full data.
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -16,7 +18,13 @@ const PAGE = 500_000;
 
 async function main() {
   const matcher = new PatternMatcher(config.queries);
-  const patternCounts = matcher.patterns.map(() => ({}));
+  const fullCounts = matcher.patterns.map(() => ({}));
+  const sampleCounts = matcher.patterns.map(() => ({}));
+  const add = (counts, indexes, ds) => {
+    for (const index of indexes) {
+      counts[index][ds] = (counts[index][ds] ?? 0) + 1;
+    }
+  };
   const manifest = {
     source: `https://zenodo.org/records/${config.zenodo.record}`,
     seed: config.seed,
@@ -30,11 +38,8 @@ async function main() {
     const doc = await hdt.fromFile(path.join(paths.hdt, `${ds}.hdt`));
     const total = (await doc.countTriples()).totalCount;
     const lines = new Set();
-    const stats = { subjectRate, triples: total, subjects: 0, sampledSubjects: 0, matching: 0, other: 0, lineage: 0 };
-    const count = (s, p, o, ds) => {
-      for (const index of matcher.match(s, p, o)) {
-        patternCounts[index][ds] = (patternCounts[index][ds] ?? 0) + 1;
-      }
+    const stats = {
+      subjectRate, triples: total, subjects: 0, matchingInFull: 0, sampledSubjects: 0, matching: 0, other: 0, lineage: 0, witnesses: 0,
     };
     let current;
     let sampled = false;
@@ -53,16 +58,19 @@ async function main() {
             throw new Error(`${ds} has blank node subjects, which is only supported with a subjectRate of 1`);
           }
         }
+        const matches = matcher.match(s, termKey(predicate), object);
+        if (matches.length > 0) {
+          stats.matchingInFull++;
+          add(fullCounts, matches, ds);
+        }
         if (!sampled) {
           continue;
         }
         const line = tripleToLine(subject, predicate, object);
-        const p = termKey(predicate);
-        const o = termKey(object);
-        if (matcher.match(s, p, o).length > 0) {
+        if (matches.length > 0) {
           lines.add(line);
           stats.matching++;
-          count(s, p, o, ds);
+          add(sampleCounts, matches, ds);
         } else if (keep(config.irrelevantRate, 'other', line)) {
           lines.add(line);
           stats.other++;
@@ -81,8 +89,18 @@ async function main() {
           lines.add(line);
           stats.lineage++;
           const [ q ] = parser.parse(line);
-          count(termKey(q.subject), termKey(q.predicate), termKey(q.object), ds);
+          add(sampleCounts, matcher.match(termKey(q.subject), termKey(q.predicate), q.object), ds);
         }
+      }
+    }
+
+    // Add a witness for each pattern that matches the full dataset, but nothing in the sample.
+    for (const entry of matcher.patterns) {
+      if (fullCounts[entry.index][ds] > 0 && !(sampleCounts[entry.index][ds] > 0)) {
+        const { triples: [ q ] } = await doc.searchTriples(...entry.terms, { limit: 1 });
+        lines.add(tripleToLine(q.subject, q.predicate, q.object));
+        stats.witnesses++;
+        add(sampleCounts, matcher.match(termKey(q.subject), termKey(q.predicate), q.object), ds);
       }
     }
 
@@ -95,8 +113,8 @@ async function main() {
 
   manifest.sampleTriples = Object.values(manifest.datasets).reduce((sum, s) => sum + s.sampleTriples, 0);
   manifest.patterns = matcher.patterns
-    .map((p, i) => ({ pattern: p.key, matches: patternCounts[i] }))
-    .sort((a, b) => Math.max(0, ...Object.values(b.matches)) - Math.max(0, ...Object.values(a.matches)));
+    .map((p, i) => ({ pattern: p.key, full: fullCounts[i], sample: sampleCounts[i] }))
+    .sort((a, b) => Math.max(0, ...Object.values(b.full)) - Math.max(0, ...Object.values(a.full)));
   const lineageStats = path.join(paths.lineage, 'stats.json');
   if (fs.existsSync(lineageStats)) {
     // Only the number of expected rows that match no solution, the rows themselves are in the lineage stats.

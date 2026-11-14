@@ -8,20 +8,35 @@ It is built from the [LargeRDFBench Interoperable Edition](https://zenodo.org/re
 
 The sample covers the 9 datasets of LargeRDFBench that originate from FedBench (ChEBI, DBpedia subset, DrugBank, GeoNames, Jamendo, KEGG, LinkedMDB, New York Times, Semantic Web Dog Food), and the 23 queries that only use those datasets: the simple queries S1-S14 and the complex queries C1-C9.
 The other queries (C10, and the large data queries B1-B8) need the LinkedTCGA and Affymetrix datasets, which together have 839 million triples, so they are not included.
+The 8 queries with many sources (CH1-CH8) that the [LargeRDFBench extension](https://ceur-ws.org/Vol-2179/SSWS2018_paper3.pdf) adds are not part of the Interoperable Edition, so they are not included either, even though CH1, CH2 and CH4 only use these 9 datasets.
 
 ## Method
 
-The 9 full datasets have 165 million triples, of which 50 million match at least one triple pattern of the 23 queries (37.7 million of those in GeoNames alone), so the sample has to be smaller than just the part that is relevant to the queries.
+The 9 full datasets have 165 million triples, of which 51 million match at least one triple pattern of the 23 queries (37.7 million of those in GeoNames alone), so the sample has to be smaller than just the part that is relevant to the queries.
 Each dataset of the sample is the union of:
 
 1. **Sampled subjects**: subjects are sampled at the `subjectRate` of their dataset (in `config.json`), based on a seeded hash, so that the sample is deterministic. All triples of a sampled subject that match a triple pattern of a query are kept. Its other triples are kept at the `irrelevantRate`. These other triples never influence query results or the cardinalities of query patterns, but they are partially kept so that the datasets are not reduced to exactly what the queries need, which matters for open patterns such as `?s ?p ?o` and for dataset-level statistics.
 2. **Answer lineage**: all triples of the full data that contribute to a result of a query, which make the queries produce exactly the same results as over the full data.
    For the queries with published expected results, those results are bound into the query with `VALUES` to recover the full solutions, including the values of unprojected variables. Expected rows that match no solution, because of defects in the published results (see below), are retried with their literals unbound.
    The queries without published results (C1, C4, C5 and C9) have a `LIMIT`, for which any subset of the right size is a correct result. To stay deterministic, they are evaluated over the full data without `LIMIT`, after which the solutions are sorted on their `ORDER BY` and their values, and the first ones are taken. As C4 is too slow to evaluate this way, it is evaluated on batches of the subjects with a `geonames:population`, in a fixed order, until it has enough distinct results (`limitCandidates` in `config.json`).
+3. **Witnesses**: for each query pattern that matches the full dataset but nothing in the sample, one matching triple, so that the same datasets are relevant to each query pattern as in the full data.
 
-The small datasets keep all their subjects, and the large ones (GeoNames, DBpedia, LinkedMDB) are sampled so that no query pattern has more than 170 000 matches, which keeps `COUNT` queries for cardinality estimation fast.
+The small datasets keep all their subjects, and the large ones (GeoNames, DBpedia, LinkedMDB) are sampled so that no query pattern has more than 170 000 matches in a dataset, which keeps `COUNT` queries for cardinality estimation fast.
 
-As subjects are sampled independently per dataset, joins across datasets lose more of their results that do not contribute to a query result than the individual patterns lose matches.
+## What the sample preserves
+
+Compared to the full data, the sample has, for all 23 queries:
+
+- the same results, so also the same result sizes;
+- the same relevant datasets for each triple pattern, so the same source selection;
+- the same query structure and SPARQL features, as the queries are unchanged.
+
+It only approximates:
+
+- the cardinalities of triple patterns: exact over the 6 datasets that keep all their subjects, and scaled down over GeoNames and DBpedia (to about 2%) and LinkedMDB (to about 25%). As a consequence, the order of the patterns of a query by cardinality differs for 8 queries (S3, S5, C3, C4, C5, C7, C8, C9), so a cost-based planner may choose different join orders than over the full data;
+- the sizes of intermediate results of joins over the 3 sampled datasets, which shrink more than the cardinalities of the individual patterns, as subjects are sampled independently per dataset.
+
+The number of matches of each query pattern per dataset, over the full data and over the sample, is listed under `patterns` in `manifest.json`.
 The sample is therefore suitable for tracking the performance of federated query engines over time, but its query times are not comparable to published LargeRDFBench results.
 
 C2 and C5 join two parts of the query only through a `FILTER` on equal values, which the Comunica versions used here evaluate as a cross product, taking minutes even over the sample. Wherever this build evaluates them, it uses the equivalent formulations in `equivalent-queries/`, which join on a shared variable instead. The queries in the archive are unchanged.
